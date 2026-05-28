@@ -1,0 +1,80 @@
+x-python-app: &python-app
+  build: .
+  image: congestion-simulator:latest
+  restart: "no"
+  volumes:
+    - ./results:/app/results
+
+services:
+  servidor-udp:
+    <<: *python-app
+    container_name: simulador_servidor_udp
+    command: >
+      python run_server.py
+      --protocol udp
+      --host 0.0.0.0
+      --port ${UDP_PORT:-9000}
+      --duration ${DURATION:-10}
+      --rate-limit ${RATE_LIMIT:-200}
+      --loss-rate ${LOSS_RATE:-0.0}
+      --metrics-file ${METRICS_FILE:-results/metrics.json}
+    ports:
+      - "${UDP_PORT:-9000}:${UDP_PORT:-9000}"
+    profiles: ["udp"]
+
+  clientes-udp:
+    <<: *python-app
+    container_name: simulador_clientes_udp
+    depends_on:
+      - servidor-udp
+    command: >
+      python run_clients.py
+      --protocol udp
+      --host servidor-udp
+      --port ${UDP_PORT:-9000}
+      --clients ${CLIENTS:-5}
+      --duration ${DURATION:-10}
+      --packet-size ${PACKET_SIZE:-1024}
+      --send-interval ${SEND_INTERVAL:-0.05}
+    profiles: ["udp"]
+
+  servidor-tcp:
+    <<: *python-app
+    container_name: simulador_servidor_tcp
+    command: >
+      python run_server.py
+      --protocol tcp
+      --host 0.0.0.0
+      --port ${TCP_PORT:-9001}
+      --duration ${DURATION:-10}
+      --rate-limit ${RATE_LIMIT:-200}
+      --loss-rate ${LOSS_RATE:-0.0}
+      --metrics-file ${METRICS_FILE:-results/metrics.json}
+    ports:
+      - "${TCP_PORT:-9001}:${TCP_PORT:-9001}"
+    profiles: ["tcp"]
+
+  clientes-tcp:
+    <<: *python-app
+    container_name: simulador_clientes_tcp
+    depends_on:
+      - servidor-tcp
+    command: >
+      python run_clients.py
+      --protocol tcp
+      --host servidor-tcp
+      --port ${TCP_PORT:-9001}
+      --clients ${CLIENTS:-5}
+      --duration ${DURATION:-10}
+      --packet-size ${PACKET_SIZE:-1024}
+      --send-interval ${SEND_INTERVAL:-0.05}
+    profiles: ["tcp"]
+
+  analise:
+    <<: *python-app
+    container_name: simulador_analise
+    command: >
+      python analise/visualizer.py
+      ${METRICS_FILE:-results/metrics.json}
+      --output-dir ${OUTPUT_DIR:-results}
+    profiles: ["analysis"]
